@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"hi-doctor-be/models"
 	"hi-doctor-be/services"
 	"hi-doctor-be/utils"
 
@@ -30,7 +31,15 @@ func (dc *DoctorController) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	doctor, err := dc.doctorService.ValidateCredentials(req.Phone, req.Password)
+	// For login, we need to decrypt the password that was encrypted on frontend
+	decryptedPassword, err := utils.DecryptPassword(req.Password)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid password format",
+		})
+	}
+
+	doctor, err := dc.doctorService.ValidateCredentials(req.Phone, decryptedPassword)
 	if err != nil {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Invalid credentials",
@@ -85,5 +94,54 @@ func (dc *DoctorController) UpdateProfile(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Profile updated successfully",
+	})
+}
+
+type RegisterDoctorRequest struct {
+	Doctorname     string   `json:"doctorname"`
+	Doctorphone    string   `json:"doctorphone"`
+	Password       string   `json:"password"`
+	Email          string   `json:"email"`
+	Gender         string   `json:"gender"`
+	Age            int      `json:"age"`
+	Experience     int      `json:"experience"`
+	Designation    string   `json:"designation"`
+	Specialisation []string `json:"specialisation"`
+	RoomNumber     string   `json:"room_number"`
+}
+
+func (dc *DoctorController) RegisterDoctor(c *fiber.Ctx) error {
+	var req RegisterDoctorRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	// No need to decrypt during registration
+	// The password will be hashed before storing
+	doctor := &models.Doctor{
+		Doctorname:     req.Doctorname,
+		Doctorphone:    req.Doctorphone,
+		Password:       req.Password, // Plain password will be hashed in service
+		Email:          req.Email,
+		Gender:         req.Gender,
+		Age:            req.Age,
+		Experience:     req.Experience,
+		Designation:    req.Designation,
+		Specialisation: req.Specialisation,
+		RoomNumber:     req.RoomNumber,
+	}
+
+	if err := dc.doctorService.RegisterDoctor(doctor); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	doctor.Password = "" // Don't send password back
+	return c.Status(201).JSON(fiber.Map{
+		"message": "Doctor registered successfully",
+		"doctor":  doctor,
 	})
 }
